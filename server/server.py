@@ -1,22 +1,93 @@
 from flask import Flask, request, redirect, send_from_directory, jsonify, session, render_template_string
 from werkzeug.utils import secure_filename
 import os
+import time
 
 app = Flask(__name__, static_folder='../client/dist')
-app.secret_key = 'SOME_SECRET'  # לשמירת סשנים
+app.secret_key = 'SOME_SECRET'
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'rashi63/uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 USERNAME = "admin"
-PASSWORD = "1234"  # החלף בסיסמה חזקה
+PASSWORD = "1204"  # החלף בסיסמה חזקה
 
-# דף התחברות בסיסי
-LOGIN_HTML = """
+# HTML בסיסי עם עיצוב
+BASE_HTML = """
+<!DOCTYPE html>
+<html dir="rtl" lang="he">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ title }}</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f8f9fa;
+      color: #333;
+      padding: 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    h1 {
+      margin-bottom: 30px;
+    }
+    form {
+      background: white;
+      padding: 30px;
+      border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+      width: 100%;
+      max-width: 400px;
+    }
+    input[type="file"], input[type="text"], input[type="password"] {
+      padding: 10px;
+      font-size: 1rem;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+    }
+    button {
+      padding: 12px;
+      font-size: 1rem;
+      background-color: #007bff;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
+    .message {
+      margin-top: 20px;
+      background: #e9ffe9;
+      padding: 15px;
+      border: 1px solid #b2ffb2;
+      border-radius: 8px;
+      color: #2e7d32;
+    }
+    a {
+      color: #007bff;
+    }
+  </style>
+</head>
+<body>
+  <h1>{{ title }}</h1>
+  {{ body }}
+</body>
+</html>
+"""
+
+# טופס התחברות
+LOGIN_FORM = """
 <form method="post">
-  <input name="username" placeholder="User">
-  <input name="password" placeholder="Pass" type="password">
-  <button type="submit">Login</button>
+  <input name="username" placeholder="שם משתמש">
+  <input name="password" placeholder="סיסמה" type="password">
+  <button type="submit">התחבר</button>
 </form>
 """
 
@@ -26,32 +97,50 @@ def login():
         if request.form["username"] == USERNAME and request.form["password"] == PASSWORD:
             session["logged_in"] = True
             return redirect("/rashi63/upload")
-    return render_template_string(LOGIN_HTML)
+    return render_template_string(BASE_HTML, title="התחברות", body=LOGIN_FORM)
 
-# דף העלאה
-UPLOAD_HTML = """
+# טופס העלאה
+UPLOAD_FORM = """
 <form method="post" enctype="multipart/form-data">
-  <input type="file" name="file">
-  <button type="submit">Upload</button>
+  <input type="file" name="file" required>
+  <button type="submit">העלה קובץ</button>
 </form>
+{% if filename %}
+<div class="message">
+  הקובץ הועלה בהצלחה:
+  <br>
+  <a href="/rashi63/uploads/{{ filename }}" target="_blank">{{ filename }}</a>
+</div>
+{% endif %}
 """
 
 @app.route("/rashi63/upload", methods=["GET", "POST"])
 def upload_file():
     if not session.get("logged_in"):
         return redirect("/login")
+    
+    uploaded_filename = None
+
     if request.method == "POST":
         f = request.files["file"]
         if f:
-            filename = secure_filename(f.filename)
-            f.save(os.path.join(UPLOAD_FOLDER, filename))
-            return f"Uploaded: <a href='/rashi63/uploads/{filename}'>{filename}</a>"
-    return render_template_string(UPLOAD_HTML)
+            original_filename = secure_filename(f.filename)
+            ext = os.path.splitext(original_filename)[1].lower()
+            timestamp = int(time.time())
+            new_filename = f"{timestamp}{ext}"
+            f.save(os.path.join(UPLOAD_FOLDER, new_filename))
+            uploaded_filename = new_filename
 
-# הצגת כל הקישורים
+    return render_template_string(BASE_HTML, title="העלאת קובץ", body=UPLOAD_FORM, filename=uploaded_filename)
+
+# API: רשימת קישורים לתמונות (מהחדש לישן)
 @app.route("/image-urls")
 def image_urls():
-    files = os.listdir(UPLOAD_FOLDER)
+    files = [
+        f for f in os.listdir(UPLOAD_FOLDER)
+        if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp'))
+    ]
+    files.sort(key=lambda f: os.path.getctime(os.path.join(UPLOAD_FOLDER, f)), reverse=True)
     urls = [request.host_url + f"rashi63/uploads/{file}" for file in files]
     return jsonify(urls)
 
@@ -71,4 +160,3 @@ def serve_static(path):
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
-

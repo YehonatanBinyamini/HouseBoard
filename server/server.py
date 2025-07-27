@@ -95,6 +95,7 @@ LOGIN_FORM = """
 </form>
 """
 
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
@@ -102,6 +103,7 @@ def login():
             session["logged_in"] = True
             return redirect("/rashi63/upload")
     return render_template_string(BASE_HTML, title="התחברות", body=LOGIN_FORM)
+
 
 # טופס העלאה
 UPLOAD_FORM = """
@@ -118,11 +120,12 @@ UPLOAD_FORM = """
 {% endif %}
 """
 
+
 @app.route("/rashi63/upload", methods=["GET", "POST"])
 def upload_file():
     if not session.get("logged_in"):
         return redirect("/login")
-    
+
     uploaded_filename = None
 
     if request.method == "POST":
@@ -138,29 +141,38 @@ def upload_file():
     return render_template_string(BASE_HTML, title="העלאת קובץ", body=UPLOAD_FORM, filename=uploaded_filename)
 
 # API: רשימת קישורים לתמונות (מהחדש לישן)
+
+
 @app.route("/image-urls")
 def image_urls():
     files = [
         f for f in os.listdir(UPLOAD_FOLDER)
         if f.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.webp'))
     ]
-    files.sort(key=lambda f: os.path.getctime(os.path.join(UPLOAD_FOLDER, f)), reverse=True)
+    files.sort(key=lambda f: os.path.getctime(
+        os.path.join(UPLOAD_FOLDER, f)), reverse=True)
     urls = [request.host_url + f"rashi63/uploads/{file}" for file in files]
     return jsonify(urls)
 
 # הגשת תמונות
+
+
 @app.route("/rashi63/uploads/<filename>")
 def uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
 
 # הגשת אתר React
+
+
 @app.route("/")
 def serve_index():
     return send_from_directory(app.static_folder, "index.html")
 
+
 @app.route("/<path:path>")
 def serve_static(path):
     return send_from_directory(app.static_folder, path)
+
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -179,12 +191,15 @@ def webhook():
     # שלב הפקודות:
     try:
         subprocess.run(["git", "pull"], cwd="/home/yb/houseBoard", check=True)
-        subprocess.run(["npm", "install"], cwd="/home/yb/houseBoard/client", check=True)
-        subprocess.run(["npm", "run", "build"], cwd="/home/yb/houseBoard/client", check=True)
+        subprocess.run(["npm", "install"],
+                       cwd="/home/yb/houseBoard/client", check=True)
+        subprocess.run(["npm", "run", "build"],
+                       cwd="/home/yb/houseBoard/client", check=True)
         subprocess.run(["systemctl", "restart", "gunicorn"], check=True)
         return "Updated", 200
     except subprocess.CalledProcessError as e:
         return f"Update failed: {str(e)}", 500
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)

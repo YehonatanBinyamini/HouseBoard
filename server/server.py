@@ -1,10 +1,14 @@
-from flask import Flask, request, redirect, send_from_directory, jsonify, session, render_template_string
+from flask import Flask, request, redirect, send_from_directory, jsonify, session, render_template_string, abort
 from werkzeug.utils import secure_filename
+import hmac
+import hashlib
+import subprocess
 import os
 import time
 
 app = Flask(__name__, static_folder='../client/dist')
 app.secret_key = 'SOME_SECRET'
+GITHUB_SECRET = 'houseBoard'
 
 UPLOAD_FOLDER = os.path.join(os.path.dirname(__file__), 'rashi63/uploads')
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
@@ -157,6 +161,30 @@ def serve_index():
 @app.route("/<path:path>")
 def serve_static(path):
     return send_from_directory(app.static_folder, path)
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    signature = request.headers.get("X-Hub-Signature-256")
+    if signature is None:
+        abort(403)
+
+    sha_name, signature = signature.split('=')
+    if sha_name != 'sha256':
+        abort(501)
+
+    mac = hmac.new(GITHUB_SECRET, msg=request.data, digestmod=hashlib.sha256)
+    if not hmac.compare_digest(mac.hexdigest(), signature):
+        abort(403)
+
+    # שלב הפקודות:
+    try:
+        subprocess.run(["git", "pull"], cwd="/home/yb/houseBoard", check=True)
+        subprocess.run(["npm", "install"], cwd="/home/yb/houseBoard/client", check=True)
+        subprocess.run(["npm", "run", "build"], cwd="/home/yb/houseBoard/client", check=True)
+        subprocess.run(["systemctl", "restart", "gunicorn"], check=True)
+        return "Updated", 200
+    except subprocess.CalledProcessError as e:
+        return f"Update failed: {str(e)}", 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
